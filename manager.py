@@ -53,8 +53,6 @@ def copymod(src, dst, filelist=None, primary=True):  # todo: add friendlier erro
     # promptSkip: 0=none, 1=skip and answer yes, 2=skip and answer no
     if filelist is None:  # dang mutable defaults
         filelist = []
-    # if not os.path.exists(dst):  # todo: don't copy empty folders
-        # os.makedirs(dst)
     # collect all files first so we can show progress
     # todo: display something while searching for files
     # noticeable blank screen with >~50 files
