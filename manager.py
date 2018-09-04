@@ -4,10 +4,12 @@ import configparser
 import sys
 import nx
 import _nx
+import re
 from nx.utils import AnsiMenu
 configFile = "ModManager.ini"
 AnsiMenu.firstrun = True
 printb = sys.stdout.buffer.write
+activeGame = ""
 
 
 # modified AnsiMenu.poll_input to resume marker position.
@@ -48,8 +50,9 @@ def removevalue(value):  # see if any option owns a value and then remove it
                 config.remove_option(section, option)
 
 
-def copymod(src, dst, filelist=None, primary=True):  # todo: add friendlier errors
+def copymod(src, dst, filelist=None, primary=True):  # todo: add friendlier OSErrors relating to possible corruption
     global promptSkip
+    global selected_mod
     # promptSkip: 0=none, 1=skip and answer yes, 2=skip and answer no
     if filelist is None:  # dang mutable defaults
         filelist = []
@@ -81,7 +84,8 @@ def copymod(src, dst, filelist=None, primary=True):  # todo: add friendlier erro
                     elif answer_index == 3:  # no to all
                         promptSkip = 2
                 if promptSkip == 1:
-                    os.remove(d)  # not 100% sure I want this, may have been having problems without
+                    os.remove(d)  # not 100% sure I want this, copyfileobj should overwrite
+                    #  but I was having problems without this
                     filelist.append([s, d])
                     removevalue(d)
                     savemodinfo(selected_mod, d)
@@ -107,7 +111,6 @@ def delmod(mod):
         file = config.get(mod, option)
         if os.path.exists(file):
             os.remove(file)
-            # filedir = file[:file.rfind("/")]
             try:
                 os.removedirs(os.path.dirname(file))  # remove empty folders
             except OSError:  # throws OSError if there are still files in the folder
@@ -126,10 +129,82 @@ def savemodinfo(mod, file):
     config.write(open(configFile, 'w'))
 
 
+# This feels like a mess. Maybe I ought to do a re-write of some of this
+def makemenu(menulist, mainmenu=False):  # todo: rename variables to make more sense
+    global pageNum
+    global modFolder
+    global selected_mod
+    global activeGame
+    listLen = 38
+    # separates the mod list into pages
+    modsPages = [menulist[x:x + listLen] for x in range(0, len(menulist), listLen)]
+    # this is the actual list of mods
+    mods = modsPages[pageNum]  # todo: Last item on last page cannot be selected
+    # this will be the list we show with the current state of the mod
+    modsPrint = list(modsPages[pageNum])
+    width = 69
+    for i, mod in enumerate(mods):  # todo: make it easier to tell which mod corresponds to which state
+        if len(modsPrint[i]) > width:
+            modsPrint[i] = modsPrint[i][:65] + "..."
+        if not mainmenu:
+            if config.has_section(mod):
+                modsPrint[i] += (width - len(modsPrint[i])) * " " + "  ACTIVE"
+            else:
+                modsPrint[i] += (width - len(modsPrint[i])) * " " + "INACTIVE"
+                # terminal is 80 characters wide in total
+    # determine if next or previous page is selected
+    if AnsiMenu.selected_idx > len(modsPrint):
+        AnsiMenu.selected_idx = len(modsPrint) - 1
+    if len(modsPages) > 1:
+        if (pageNum + 1) < len(modsPages):
+            modsPrint.append("[Next Page]")
+        if pageNum != 0:
+            modsPrint.append("[Previous Page]")
+
+    if (pageNum == 0) & (not mainmenu):
+        modsPrint.insert(0, "[Main Menu]")
+        listLen += 1
+    selected_index = AnsiMenu(modsPrint).query()
+
+    # previous page on last page
+    if (pageNum + 1 == len(modsPages)) & (selected_index + 1 == len(modsPrint)) & (len(modsPages) > 1):
+        pageNum -= 1
+        AnsiMenu.selected_idx = listLen  # todo: this works inconsistently in some cases due to prepending
+    # previous page
+    elif selected_index == listLen + 1:
+        pageNum -= 1
+        AnsiMenu.selected_idx = listLen
+    # next page
+    elif selected_index == listLen:
+        pageNum += 1
+        AnsiMenu.selected_idx = 0
+    # Main Menu
+    elif (pageNum == 0) & (selected_index == 0) & (not mainmenu):
+        modFolder = config.get("options", "modFolder")
+        AnsiMenu.selected_idx = 0
+    elif not mainmenu:
+        AnsiMenu.selected_idx = selected_index
+        if pageNum == 0:
+            selected_index -= 1
+        selected_mod = mods[selected_index]
+        nx.utils.clear_terminal()
+        sys.stdout.flush()
+        if config.has_section(selected_mod):
+            delmod(selected_mod)
+        else:
+            copymod(modFolder + "/" + selected_mod, layeredFSFolder)
+    else:
+        activeGame = mods[selected_index]
+        modFolder = modFolder + "/" + activeGame
+
+
+def natural_key(string_):  # for natural sorting
+    return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string_)]
+
+
 if __name__ == '__main__':
 
     pageNum = 0
-    activeGame = ""
     config = configparser.RawConfigParser()
     config.read(configFile)
     # if config does't exit, add some default values
@@ -149,81 +224,35 @@ if __name__ == '__main__':
 
         if not os.path.isdir(modFolder):
             os.mkdir(modFolder)
-        # maybe rewrite my calling of ansimenu into a function so I don't have to do it twice
-        # would that even simplify things? I'm definitely copy pasting too much.
-        if modFolder == config.get("options", "modFolder"):
+        if (modFolder == config.get("options", "modFolder")) & bool(os.listdir(modFolder)):  # todo: FIX THIS list != bool
             gameList = os.listdir(modFolder)
-            gameList = sorted(gameList, key=str.lower)
+            gameList = sorted(gameList, key=natural_key)
             nx.utils.clear_terminal()
             sys.stdout.flush()
-            printb(b"Generic Mod Manager" + bytes(" " * 53, "UTF-8") + b"By Seth\n\n")
-            selected_index = AnsiMenu(gameList).query()
-            activeGame = gameList[selected_index]
-            modFolder = modFolder + "/" + activeGame
-        if os.listdir(modFolder):
-            listLen = 38
-            data = os.listdir(modFolder)  # seems to default to time added todo: consider adding new ways to sort
+            printb(b"Generic Mod Manager" + bytes(" " * 53, "UTF-8") + b"By Seth\n\n")  # Main menu
+            makemenu(gameList, True)
+            AnsiMenu.selected_idx = 0
+        elif modFolder == config.get("options", "modFolder"):
+            nx.utils.clear_terminal()
+            print("Your mods folder \"" + modFolder + "\" looks empty\n"
+                  "Add some mods to it or change the folder location in " + configFile)
+            sys.stdout.flush()
+            AnsiMenu(["try again?"]).query()
+        elif os.listdir(modFolder):
+            modFolderList = os.listdir(modFolder)  # seems to default to time added todo: consider adding new ways to sort
             # data = sorted(data,  key=str.lower)  # alphabetical
-            # separates the mod list into pages
-            modsPages = [data[x:x+listLen] for x in range(0, len(data), listLen)]
-            # this is the actual list of mods
-            mods = modsPages[pageNum]
-            # this will be the list we show with the current state of the mod
-            modsPrint = list(modsPages[pageNum])
-            width = 69
-            for i, mod in enumerate(mods):  # todo: make it easier to tell which mod corresponds to which state
-                if len(modsPrint[i]) > width:
-                    modsPrint[i] = modsPrint[i][:65] + "..."
-                if config.has_section(mod):
-                    modsPrint[i] += (width-len(modsPrint[i]))*" " + "  ACTIVE"
-                else:
-                    modsPrint[i] += (width-len(modsPrint[i]))*" " + "INACTIVE"
-                    # terminal is 80 characters wide in total
 
             nx.utils.clear_terminal()
             sys.stdout.flush()
             printb(b"Generic Mod Manager"+bytes(" "*53, "UTF-8")+b"By Seth\n\n")
             printb(bytes(" "*(40-(len(activeGame)//2))+activeGame+"\n"[:80], "UTF-8"))
             # printb(b"Warning: Exiting during an operation can cause mod files to be corrupted")
-            # determine if next or previous page is selected
-            if AnsiMenu.selected_idx > len(modsPrint):
-                AnsiMenu.selected_idx = len(modsPrint) - 1
-            if len(modsPages) > 1:
-                if (pageNum + 1) < len(modsPages):
-                    modsPrint.append("[Next Page]")
-                if pageNum != 0:
-                    modsPrint.append("[Previous Page]")
-
-            if pageNum == 0:
-                modsPrint.insert(0, "[Main Menu]")
-                listLen += 1
-            selected_index = AnsiMenu(modsPrint).query()
-
-            if (pageNum + 1 == len(modsPages)) & (selected_index + 1 == len(modsPrint)) & (len(modsPages) > 1):
-                    pageNum -= 1
-                    AnsiMenu.selected_idx = listLen  # todo: this works inconsistently in some cases due to prepending
-            elif selected_index == listLen+1:
-                pageNum -= 1
-                AnsiMenu.selected_idx = listLen
-            elif selected_index == listLen:
-                pageNum += 1
-                AnsiMenu.selected_idx = 0
-            elif (pageNum == 0) & (selected_index == 0):
-                modFolder = config.get("options", "modFolder")
-                AnsiMenu.selected_idx = 0
-            else:
-                AnsiMenu.selected_idx = selected_index
-                if pageNum == 0:
-                    selected_index -= 1
-                selected_mod = mods[selected_index]
-                nx.utils.clear_terminal()
-                sys.stdout.flush()
-                if config.has_section(selected_mod):
-                    delmod(selected_mod)
-                else:
-                    copymod(modFolder + "/" + selected_mod, layeredFSFolder)
+            makemenu(modFolderList)
         else:
-            print("Your mods folder \""+modFolder+"\" looks empty\n"
-                  "Add some mods to it or change the folder location in "+configFile)
+            nx.utils.clear_terminal()
+            print("This game folder, \""+modFolder+"\" doesn't seem to have any mods\n"
+                  "Add some mods to it or change the folder location in "+configFile+"\n")
             sys.stdout.flush()
-            AnsiMenu(["try again?"]).query()
+            selected_index = AnsiMenu(["[Main Menu]","try again?"]).query()
+            if selected_index == 0:
+                modFolder = config.get("options", "modFolder")
