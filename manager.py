@@ -80,8 +80,10 @@ def copymod(src, dst, filelist=None, primary=True):  # making this recursive is 
                     else:
                         print(d + " already exists.\nReplace it?\n")
                     sys.stdout.flush()
+                    saveidx = AnsiMenu.selected_idx
                     AnsiMenu.selected_idx = 0
                     answer_index = AnsiMenu(["Yes", "No", "Yes to all", "No to all"]).query()
+                    AnsiMenu.selected_idx = saveidx
                     nx.utils.clear_terminal()
                     sys.stdout.flush()
                     if answer_index == 0:  # yes
