@@ -48,6 +48,8 @@ def removevalue(value):  # see if any option owns a value and then remove it
         for option in config.options(section):
             if config.get(section, option) == value:
                 config.remove_option(section, option)
+        if not config.options(section):
+            config.remove_section(section)
 
 
 def copymod(src, dst, filelist=None, primary=True):  # making this recursive is causing a lot of trouble
