@@ -153,7 +153,7 @@ def makemenu(menulist, mainmenu=False):  # todo: rename variables to make more s
     # separates the mod list into pages
     modsPages = [menulist[x:x + listLen] for x in range(0, len(menulist), listLen)]
     # this is the actual list of mods
-    mods = modsPages[pageNum]  # todo: Last item on last page cannot be selected
+    mods = modsPages[pageNum]
     # this will be the list we show with the current state of the mod
     modsPrint = list(modsPages[pageNum])
     width = 77  # Ansimenu uses the other 3
