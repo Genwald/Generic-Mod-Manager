@@ -70,10 +70,19 @@ def copymod(src, dst, filelist=None, primary=True):  # todo: add friendlier OSEr
                 savemodinfo(selected_mod, d)
             else:
                 if promptSkip == 0:
-                    print(d + " already exists. Replace it?\n")
+                    fileowner = None
+                    for section in config.sections():
+                        for option in config.options(section):
+                            if config.get(section, option) == d:
+                                fileowner = section
+                    if fileowner:
+                        print("The mod \"" + fileowner + "\" is already using \"" + d + "\"\nReplace the file?\n")
+                    else:
+                        print(d + " already exists.\nReplace it?\n")
                     sys.stdout.flush()
                     AnsiMenu.selected_idx = 0
                     answer_index = AnsiMenu(["Yes", "No", "Yes to all", "No to all"]).query()
+                    nx.utils.clear_terminal()
                     if answer_index == 0:  # yes
                         os.remove(d)
                         filelist.append([s, d])
@@ -147,7 +156,7 @@ def makemenu(menulist, mainmenu=False):  # todo: rename variables to make more s
         if len(modsPrint[i]) > width:
             modsPrint[i] = modsPrint[i][:65] + "..."
         if not mainmenu:
-            if config.has_section(mod):
+            if config.has_section(mod):  # todo: tell how many files are active if not all are
                 modsPrint[i] += (width - len(modsPrint[i])) * " " + "  ACTIVE"
             else:
                 modsPrint[i] += (width - len(modsPrint[i])) * " " + "INACTIVE"
