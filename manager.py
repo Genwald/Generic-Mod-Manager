@@ -249,7 +249,7 @@ if __name__ == '__main__':
 
         if not os.path.isdir(modFolder):
             os.mkdir(modFolder)
-        if (modFolder == config.get("options", "modFolder")) & bool(os.listdir(modFolder)):  # todo: FIX THIS list != bool
+        if (modFolder == config.get("options", "modFolder")) & bool(os.listdir(modFolder)):
             gameList = os.listdir(modFolder)
             gameList = sorted(gameList, key=natural_key)
             nx.utils.clear_terminal()
