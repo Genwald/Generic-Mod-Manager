@@ -50,9 +50,10 @@ def removevalue(value):  # see if any option owns a value and then remove it
                 config.remove_option(section, option)
 
 
-def copymod(src, dst, filelist=None, primary=True):  # todo: add friendlier OSErrors relating to possible corruption
+def copymod(src, dst, filelist=None, primary=True):  # making this recursive is causing a lot of trouble
     global promptSkip
     global selected_mod
+    global filecount
     # promptSkip: 0=none, 1=skip and answer yes, 2=skip and answer no
     if filelist is None:  # dang mutable defaults
         filelist = []
@@ -67,7 +68,6 @@ def copymod(src, dst, filelist=None, primary=True):  # todo: add friendlier OSEr
         else:
             if not os.path.exists(d):  # or os.stat(s).st_mtime - os.stat(d).st_mtime > 1:
                 filelist.append([s, d])
-                savemodinfo(selected_mod, d)
             else:
                 if promptSkip == 0:
                     fileowner = None
@@ -83,11 +83,13 @@ def copymod(src, dst, filelist=None, primary=True):  # todo: add friendlier OSEr
                     AnsiMenu.selected_idx = 0
                     answer_index = AnsiMenu(["Yes", "No", "Yes to all", "No to all"]).query()
                     nx.utils.clear_terminal()
+                    sys.stdout.flush()
                     if answer_index == 0:  # yes
                         os.remove(d)
                         filelist.append([s, d])
                         removevalue(d)
-                        savemodinfo(selected_mod, d)
+                    elif answer_index == 1:
+                        filecount += 1
                     elif answer_index == 2:  # yes to all
                         promptSkip = 1
                     elif answer_index == 3:  # no to all
@@ -97,10 +99,11 @@ def copymod(src, dst, filelist=None, primary=True):  # todo: add friendlier OSEr
                     #  but I was having problems without this
                     filelist.append([s, d])
                     removevalue(d)
-                    savemodinfo(selected_mod, d)
-                # if promptSkip == 2 do nothing
+                if promptSkip == 2:
+                    filecount += 1
     # do actual copying
     if primary:  # only reached once all recursive calls are done
+        filecount += len(filelist)
         for i, file in enumerate(filelist):
             nx.utils.clear_terminal()
             printb(b'Copying file ' + bytes(str(i+1), "UTF-8") + b' of ' + bytes(str(len(filelist)), "UTF-8") +
@@ -110,7 +113,11 @@ def copymod(src, dst, filelist=None, primary=True):  # todo: add friendlier OSEr
             # If I don't here, nothing shows, but in other places it isn't needed.
             if not os.path.exists(os.path.dirname(file[1])):
                 os.makedirs(os.path.dirname(file[1]))
-            shutil.copyfileobj(open(file[0], 'rb'), open(file[1], 'wb'), 16*1024*1024)
+            try:
+                shutil.copyfileobj(open(file[0], 'rb'), open(file[1], 'wb'), 16*1024*1024)
+            except OSError as err:
+                raise OSError("\n\n\nHey, it looks like \"" + file[0] + "\" might be corrupt.") from err
+            savemodinfo(selected_mod, file[1], filecount)
             # todo: investigate long (~1 second) blank screen after large transfer (linkle mod)
 
 
@@ -128,13 +135,11 @@ def delmod(mod):
     config.write(open(configFile, 'w'))
 
 
-def savemodinfo(mod, file):
+def savemodinfo(mod, file, length):
     if not config.has_section(mod):
         config.add_section(mod)
-    option = 1
-    while config.has_option(mod, str(option)):
-        option += 1
-    config.set(mod, str(option), file)
+    option = len(config.options(mod))
+    config.set(mod, str(length) + "," + str(option), file)
     config.write(open(configFile, 'w'))
 
 
@@ -151,15 +156,21 @@ def makemenu(menulist, mainmenu=False):  # todo: rename variables to make more s
     mods = modsPages[pageNum]  # todo: Last item on last page cannot be selected
     # this will be the list we show with the current state of the mod
     modsPrint = list(modsPages[pageNum])
-    width = 69
+    width = 77  # Ansimenu uses the other 3
     for i, mod in enumerate(mods):  # todo: make it easier to tell which mod corresponds to which state
-        if len(modsPrint[i]) > width:
+        if len(modsPrint[i]) > 68:
             modsPrint[i] = modsPrint[i][:65] + "..."
         if not mainmenu:
-            if config.has_section(mod):  # todo: tell how many files are active if not all are
-                modsPrint[i] += (width - len(modsPrint[i])) * " " + "  ACTIVE"
+            if config.has_section(mod):
+                totalfiles = int(config.options(mod)[0].split(",")[0])
+                active = len(config.options(mod))
+                fractionenabled = str(active) + "/" + str(totalfiles)
+                if totalfiles > active:
+                    modsPrint[i] += (width - (len(modsPrint[i]) + len(fractionenabled))) * " " + fractionenabled
+                else:
+                    modsPrint[i] += (width - (len(modsPrint[i]) + 6)) * " " + "ACTIVE"
             else:
-                modsPrint[i] += (width - len(modsPrint[i])) * " " + "INACTIVE"
+                modsPrint[i] += (width - (len(modsPrint[i]) + 8)) * " " + "INACTIVE"
                 # terminal is 80 characters wide in total
     # determine if next or previous page is selected
     if AnsiMenu.selected_idx > len(modsPrint):
@@ -230,6 +241,7 @@ if __name__ == '__main__':
 
     while True:  # todo: maybe add a way to exit to hbmenu
         promptSkip = 0
+        filecount = 0
 
         if not os.path.isdir(modFolder):
             os.mkdir(modFolder)
