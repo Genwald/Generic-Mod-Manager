@@ -60,7 +60,7 @@ def copymod(src, dst, filelist=None, primary=True):  # making this recursive is 
     if filelist is None:  # dang mutable defaults
         filelist = []
     # collect all files first so we can show progress
-    # todo: display something while searching for files
+    # todo: maybe display something while searching for files
     # noticeable blank screen with >~50 files
     for item in os.listdir(src):
         s = os.path.join(src, item)
@@ -78,7 +78,8 @@ def copymod(src, dst, filelist=None, primary=True):  # making this recursive is 
                             if config.get(section, option) == d:
                                 fileowner = section
                     if fileowner:
-                        print("The mod \"" + fileowner + "\" is already using \"" + d + "\"\nReplace the file?\n")
+                        print("The mod \"" + fileowner.split("|")[1] + "\" from \"" + fileowner.split("|")[0] +
+                              "\" is already using \"" + d + "\"\nReplace the file?\n")
                     else:
                         print(d + " already exists.\nReplace it?\n")
                     sys.stdout.flush()
@@ -127,23 +128,26 @@ def copymod(src, dst, filelist=None, primary=True):  # making this recursive is 
 
 def delmod(mod):
     # printb(b"Removing files\n Do not exit")  # I don't think this is needed, deletes too fast to be visible
-    for option in config.options(mod):
-        file = config.get(mod, option)
+    sectionName = activeGame + "|" + mod
+    for option in config.options(sectionName):
+        file = config.get(sectionName, option)
         if os.path.exists(file):
             os.remove(file)
             try:
                 os.removedirs(os.path.dirname(file))  # remove empty folders
             except OSError:  # throws OSError if there are still files in the folder
                 pass  # do nothing if there are other files
-    config.remove_section(mod)
+    config.remove_section(sectionName)
     config.write(open(configFile, 'w'))
 
 
 def savemodinfo(mod, file, length):
-    if not config.has_section(mod):
-        config.add_section(mod)
-    option = len(config.options(mod))
-    config.set(mod, str(length) + "," + str(option), file)
+    # global activeGame
+    sectionName = activeGame + "|" + mod
+    if not config.has_section(sectionName):
+        config.add_section(sectionName)
+    option = len(config.options(sectionName))  # to make options not identical
+    config.set(sectionName, str(length) + "," + str(option), file)
     config.write(open(configFile, 'w'))
 
 
@@ -151,6 +155,7 @@ def savemodinfo(mod, file, length):
 def makemenu(menulist, mainmenu=False):  # todo: rename variables to make more sense
     global pageNum
     global modFolder
+    global originalModFolder
     global selected_mod
     global activeGame
     listLen = 38
@@ -165,9 +170,10 @@ def makemenu(menulist, mainmenu=False):  # todo: rename variables to make more s
         if len(modsPrint[i]) > 68:
             modsPrint[i] = modsPrint[i][:65] + "..."
         if not mainmenu:
-            if config.has_section(mod):
-                totalfiles = int(config.options(mod)[0].split(",")[0])
-                active = len(config.options(mod))
+            section = activeGame + "|" + mod
+            if config.has_section(section):
+                totalfiles = int(config.options(section)[0].split(",")[0])
+                active = len(config.options(section))
                 fractionenabled = str(active) + "/" + str(totalfiles)
                 if totalfiles > active:
                     modsPrint[i] += (width - (len(modsPrint[i]) + len(fractionenabled))) * " " + fractionenabled
@@ -204,7 +210,7 @@ def makemenu(menulist, mainmenu=False):  # todo: rename variables to make more s
         AnsiMenu.selected_idx = 0
     # Main Menu
     elif (pageNum == 0) & (selected_index == 0) & (not mainmenu):
-        modFolder = config.get("options", "modFolder")
+        modFolder = originalModFolder
         AnsiMenu.selected_idx = 0
     elif not mainmenu:
         AnsiMenu.selected_idx = selected_index
@@ -213,7 +219,7 @@ def makemenu(menulist, mainmenu=False):  # todo: rename variables to make more s
         selected_mod = mods[selected_index]
         nx.utils.clear_terminal()
         sys.stdout.flush()
-        if config.has_section(selected_mod):
+        if config.has_section(activeGame + "|" + selected_mod):
             delmod(selected_mod)
         else:
             copymod(modFolder + "/" + selected_mod, layeredFSFolder)
@@ -232,24 +238,29 @@ if __name__ == '__main__':
     config = configparser.RawConfigParser()
     config.read(configFile)
     # if config does't exit, add some default values
-    if not config.has_section("options"):
-        config.add_section("options")
-    if not config.has_option("options", "modFolder"):
-        config.set("options", "modFolder", "/mods")
-    if not config.has_option("options", "layeredFSFolder"):
-        config.set("options", "layeredFSFolder", "/atmosphere/titles")
+    if not config.has_section("|options|"):
+        config.add_section("|options|")
+    if not config.has_option("|options|", "modFolder"):
+        config.set("|options|", "modFolder", "/mods")
+    if not config.has_option("|options|", "layeredFSFolder"):
+        config.set("|options|", "layeredFSFolder", "/atmosphere/titles")
     config.write(open(configFile, 'w'))
 
-    modFolder = config.get("options", "modFolder")
-    layeredFSFolder = config.get("options", "layeredFSFolder")
+    modFolder = config.get("|options|", "modFolder")
+    originalModFolder = config.get("|options|", "modFolder")  # for comparisons
+    layeredFSFolder = config.get("|options|", "layeredFSFolder")
 
     while True:  # todo: maybe add a way to exit to hbmenu
         promptSkip = 0
         filecount = 0
 
         if not os.path.isdir(modFolder):
+            nx.utils.clear_terminal()
+            print("Your mods folder \"" + modFolder + "\" doesn't exit\n")
+            sys.stdout.flush()
+            AnsiMenu(["Create it?"]).query()
             os.mkdir(modFolder)
-        if (modFolder == config.get("options", "modFolder")) & bool(os.listdir(modFolder)):
+        if (modFolder == originalModFolder) & bool(os.listdir(modFolder)):
             gameList = os.listdir(modFolder)
             gameList = sorted(gameList, key=natural_key)
             nx.utils.clear_terminal()
@@ -257,10 +268,13 @@ if __name__ == '__main__':
             printb(b"Generic Mod Manager" + bytes(" " * 53, "UTF-8") + b"By Seth\n\n")  # Main menu
             makemenu(gameList, True)
             AnsiMenu.selected_idx = 0
-        elif modFolder == config.get("options", "modFolder"):
+        elif modFolder == originalModFolder:
             nx.utils.clear_terminal()
             print("Your mods folder \"" + modFolder + "\" looks empty\n"
-                  "Add some mods to it or change the folder location in " + configFile)
+                  "Add some mods to it or change the folder location in " + configFile +
+                  "\n\nThe recommended folder format for mods is:\n"
+                  "\"/ModsFolder/GameName/ModName/TitleID/ModFiles\"\n\n"
+                  "For Example:\n\"/mods/Legend of Zelda/Bowser Hinox/01007EF00011E000/romfs/...\"\n")
             sys.stdout.flush()
             AnsiMenu(["try again?"]).query()
         elif os.listdir(modFolder):
@@ -280,4 +294,4 @@ if __name__ == '__main__':
             sys.stdout.flush()
             selected_index = AnsiMenu(["[Main Menu]","try again?"]).query()
             if selected_index == 0:
-                modFolder = config.get("options", "modFolder")
+                modFolder = originalModFolder
