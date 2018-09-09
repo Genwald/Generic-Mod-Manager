@@ -16,17 +16,14 @@ class ExitToHBMenu(Exception):
     pass
 
 
-# modified AnsiMenu.poll_input to resume marker position.
-# I feel like I could have done this in a better way... but this works
+# modified AnsiMenu.poll_input to resume marker position and have quicker movement options
 def poll_input(self):
     if self.firstrun:
         # todo: do this differently to prevent delay when placing marker near the bottom of the screen
         self.console.write(b" "+bytes("\n"*self.selected_idx+"\r>\r", 'UTF-8'))
         self.firstrun = False
     _nx.hid_scan_input()
-    keys_down = _nx.hid_keys_down(self.CONTROLLER_P1_AUTO)  # | _nx.hid_keys_held(self.CONTROLLER_P1_AUTO)
-    # todo: also move marker if button is held or maybe another way to move faster.
-    # I think I need to wait on pyNX for this.
+    keys_down = _nx.hid_keys_down(self.CONTROLLER_P1_AUTO)
 
     if keys_down & self.KEY_A:
         return True
@@ -41,6 +38,24 @@ def poll_input(self):
         if self.selected_idx < len(self.entries) - 1:
             self.selected_idx += 1
             self.console.write(b" \n\r>\r")
+            self.console.flush()
+    elif keys_down & (1 << 14):
+        if self.selected_idx < len(self.entries) - 5:
+            self.selected_idx += 5
+            self.console.write(b" \n\n\n\n\n\r>\r")
+            self.console.flush()
+        else:
+            self.console.write(bytes((" " + "\n"*((len(self.entries) - 1) - self.selected_idx))+"\r>\r", "UTF-8"))
+            self.selected_idx = len(self.entries) - 1
+            self.console.flush()
+    elif keys_down & (1 << 12):
+        if self.selected_idx > 5:
+            self.selected_idx -= 5
+            self.console.write(b" \x1b[1A\x1b[1A\x1b[1A\x1b[1A\x1b[1A\r>\r")
+            self.console.flush()
+        else:
+            self.console.write(bytes((" " + "\x1b[1A" * self.selected_idx) + "\r>\r", "UTF-8"))
+            self.selected_idx = 0
             self.console.flush()
 
     return False
