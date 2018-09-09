@@ -12,6 +12,10 @@ printb = sys.stdout.buffer.write
 activeGame = ""
 
 
+class ExitToHBMenu(Exception):
+    pass
+
+
 # modified AnsiMenu.poll_input to resume marker position.
 # I feel like I could have done this in a better way... but this works
 def poll_input(self):
@@ -26,6 +30,8 @@ def poll_input(self):
 
     if keys_down & self.KEY_A:
         return True
+    elif keys_down & (1 << 10):
+        raise ExitToHBMenu
     elif keys_down & self.KEY_UP:
         if self.selected_idx > 0:
             self.selected_idx -= 1
@@ -52,6 +58,7 @@ def removevalue(value):  # see if any option owns a value and then remove it
             config.remove_section(section)
 
 
+# todo: maybe move files instead of copying to speed things up. Or maybe add an option to choose.
 def copymod(src, dst, filelist=None, primary=True):  # making this recursive is causing a lot of trouble
     global promptSkip
     global selected_mod
@@ -250,48 +257,53 @@ if __name__ == '__main__':
     originalModFolder = config.get("|options|", "modFolder")  # for comparisons
     layeredFSFolder = config.get("|options|", "layeredFSFolder")
 
-    while True:  # todo: maybe add a way to exit to hbmenu
-        promptSkip = 0
-        filecount = 0
+    try:
+        while True:
+            promptSkip = 0
+            filecount = 0
 
-        if not os.path.isdir(modFolder):
-            nx.utils.clear_terminal()
-            print("Your mods folder \"" + modFolder + "\" doesn't exit\n")
-            sys.stdout.flush()
-            AnsiMenu(["Create it?"]).query()
-            os.mkdir(modFolder)
-        if (modFolder == originalModFolder) & bool(os.listdir(modFolder)):
-            gameList = os.listdir(modFolder)
-            gameList = sorted(gameList, key=natural_key)
-            nx.utils.clear_terminal()
-            sys.stdout.flush()
-            printb(b"Generic Mod Manager" + bytes(" " * 53, "UTF-8") + b"By Seth\n\n")  # Main menu
-            makemenu(gameList, True)
-            AnsiMenu.selected_idx = 0
-        elif modFolder == originalModFolder:
-            nx.utils.clear_terminal()
-            print("Your mods folder \"" + modFolder + "\" looks empty\n"
-                  "Add some mods to it or change the folder location in " + configFile +
-                  "\n\nThe recommended folder format for mods is:\n"
-                  "\"/ModsFolder/GameName/ModName/TitleID/ModFiles\"\n\n"
-                  "For Example:\n\"/mods/Legend of Zelda/Bowser Hinox/01007EF00011E000/romfs/...\"\n")
-            sys.stdout.flush()
-            AnsiMenu(["try again?"]).query()
-        elif os.listdir(modFolder):
-            modFolderList = os.listdir(modFolder)  # seems to default to time added todo: consider adding new ways to sort
-            # data = sorted(data,  key=str.lower)  # alphabetical
+            if not os.path.isdir(modFolder):
+                nx.utils.clear_terminal()
+                print("Your mods folder \"" + modFolder + "\" doesn't exit\n")
+                sys.stdout.flush()
+                AnsiMenu(["Create it?"]).query()
+                os.mkdir(modFolder)
+            if (modFolder == originalModFolder) & bool(os.listdir(modFolder)):
+                gameList = os.listdir(modFolder)
+                gameList = sorted(gameList, key=natural_key)
+                nx.utils.clear_terminal()
+                sys.stdout.flush()
+                printb(b"Generic Mod Manager" + bytes(" " * 53, "UTF-8") + b"By Seth\n\n")  # Main menu
+                makemenu(gameList, True)
+                AnsiMenu.selected_idx = 0
+            elif modFolder == originalModFolder:
+                nx.utils.clear_terminal()
+                print("Your mods folder \"" + modFolder + "\" looks empty\n"
+                      "Add some mods to it or change the folder location in " + configFile +
+                      "\n\nThe recommended folder format for mods is:\n"
+                      "\"/ModsFolder/GameName/ModName/TitleID/ModFiles\"\n\n"
+                      "For Example:\n\"/mods/Legend of Zelda/Bowser Hinox/01007EF00011E000/romfs/...\"\n")
+                sys.stdout.flush()
+                AnsiMenu(["try again?"]).query()
+            elif os.listdir(modFolder):
+                modFolderList = os.listdir(modFolder)  # seems to default to time added todo: consider adding new ways to sort
+                # data = sorted(data,  key=str.lower)  # alphabetical
 
-            nx.utils.clear_terminal()
-            sys.stdout.flush()
-            printb(b"Generic Mod Manager"+bytes(" "*53, "UTF-8")+b"By Seth\n\n")
-            printb(bytes(" "*(40-(len(activeGame)//2))+activeGame+"\n"[:80], "UTF-8"))
-            # printb(b"Warning: Exiting during an operation can cause mod files to be corrupted")
-            makemenu(modFolderList)
-        else:
-            nx.utils.clear_terminal()
-            print("This game folder, \""+modFolder+"\" doesn't seem to have any mods\n"
-                  "Add some mods to it or change the folder location in "+configFile+"\n")
-            sys.stdout.flush()
-            selected_index = AnsiMenu(["[Main Menu]","try again?"]).query()
-            if selected_index == 0:
-                modFolder = originalModFolder
+                nx.utils.clear_terminal()
+                sys.stdout.flush()
+                printb(b"Generic Mod Manager"+bytes(" "*53, "UTF-8")+b"By Seth\n\n")
+                printb(bytes(" "*(40-(len(activeGame)//2))+activeGame+"\n"[:80], "UTF-8"))
+                # printb(b"Warning: Exiting during an operation can cause mod files to be corrupted")
+                makemenu(modFolderList)
+            else:
+                nx.utils.clear_terminal()
+                print("This game folder, \""+modFolder+"\" doesn't seem to have any mods\n"
+                      "Add some mods to it or change the folder location in "+configFile+"\n")
+                sys.stdout.flush()
+                selected_index = AnsiMenu(["[Main Menu]", "try again?"]).query()
+                if selected_index == 0:
+                    modFolder = originalModFolder
+    except ExitToHBMenu:
+        nx.utils.clear_terminal()
+        sys.stderr.write("Press + again to exit")
+        sys.stdout.flush()
