@@ -3,7 +3,7 @@ For use with [PyNX](https://github.com/nx-python/PyNX) on the Nintendo switch
 
 Copies files from a mods folder to the folder used by layeredFS.
 ## Configuration
-Reccomended mod folder format is: ModFolder/NameOfGame/ModTitle/titleid/ModContent
+Recommended mod folder format is: ModFolder/NameOfGame/ModTitle/titleid/ModContent
 
 Example: /mods/Mario Odyssey/Beanstar Moons/0100000000010000/romfs/...
 
